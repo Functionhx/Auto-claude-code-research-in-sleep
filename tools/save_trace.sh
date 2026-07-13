@@ -150,11 +150,13 @@ if [[ "$TRACE_MODE" == "full" ]]; then
 import json, os, sys
 e = os.environ
 effort_unpinned = (e.get("ST_BACKEND") == "copilot")
-# Derive independence from actual families — never trust a caller-provided flag.
-# Same-family reviewers are NOT independent (same org/model lineage).
+# Validate both families against the known set before comparing.
+# Unknown or unset families produce "unverified" — the schema’s
+# "both known" rule means we must not guess independence.
+KNOWN_FAMILIES = {"openai", "anthropic", "google"}
 ef = (e.get("ST_EXECUTOR_FAMILY") or "").lower()
 rf = (e.get("ST_REVIEWER_FAMILY") or "").lower()
-if ef and rf:
+if ef in KNOWN_FAMILIES and rf in KNOWN_FAMILIES:
     iv = (ef != rf)
 else:
     iv = "unverified"
@@ -200,11 +202,13 @@ else
 import json, os
 e = os.environ
 effort_unpinned = (e.get("ST_BACKEND") == "copilot")
-# Derive independence from actual families — never trust a caller-provided flag.
-# Same-family reviewers are NOT independent (same org/model lineage).
+# Validate both families against the known set before comparing.
+# Unknown or unset families produce "unverified" — the schema’s
+# "both known" rule means we must not guess independence.
+KNOWN_FAMILIES = {"openai", "anthropic", "google"}
 ef = (e.get("ST_EXECUTOR_FAMILY") or "").lower()
 rf = (e.get("ST_REVIEWER_FAMILY") or "").lower()
-if ef and rf:
+if ef in KNOWN_FAMILIES and rf in KNOWN_FAMILIES:
     iv = (ef != rf)
 else:
     iv = "unverified"
@@ -248,11 +252,13 @@ ST_OUT="${RUN_DIR}/${CALL_PREFIX}-${PURPOSE}.meta.json" python3 -c '
 import json, os
 e = os.environ
 effort_unpinned = (e.get("ST_BACKEND") == "copilot")
-# Derive independence from actual families — never trust a caller-provided flag.
-# Same-family reviewers are NOT independent (same org/model lineage).
+# Validate both families against the known set before comparing.
+# Unknown or unset families produce "unverified" — the schema’s
+# "both known" rule means we must not guess independence.
+KNOWN_FAMILIES = {"openai", "anthropic", "google"}
 ef = (e.get("ST_EXECUTOR_FAMILY") or "").lower()
 rf = (e.get("ST_REVIEWER_FAMILY") or "").lower()
-if ef and rf:
+if ef in KNOWN_FAMILIES and rf in KNOWN_FAMILIES:
     iv = (ef != rf)
 else:
     iv = "unverified"
@@ -290,11 +296,13 @@ if [[ -d ".aris/meta" ]]; then
 import json, os
 e = os.environ
 effort_unpinned = (e.get("ST_BACKEND") == "copilot")
-# Derive independence from actual families — never trust a caller-provided flag.
-# Same-family reviewers are NOT independent (same org/model lineage).
+# Validate both families against the known set before comparing.
+# Unknown or unset families produce "unverified" — the schema’s
+# "both known" rule means we must not guess independence.
+KNOWN_FAMILIES = {"openai", "anthropic", "google"}
 ef = (e.get("ST_EXECUTOR_FAMILY") or "").lower()
 rf = (e.get("ST_REVIEWER_FAMILY") or "").lower()
-if ef and rf:
+if ef in KNOWN_FAMILIES and rf in KNOWN_FAMILIES:
     iv = (ef != rf)
 else:
     iv = "unverified"
