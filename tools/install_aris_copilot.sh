@@ -70,6 +70,7 @@ GLOBAL_POINTER="$HOME/.aris/repo"
 ARIS_DIR_NAME=".aris"
 LOCK_DIR_NAME=".install-copilot.lock.d"
 SKILLS_REL=".github/skills"
+AGENTS_REL=".github/agents"
 DOC_FILE_NAME="AGENTS.md"
 BLOCK_BEGIN="<!-- ARIS-COPILOT:BEGIN -->"
 BLOCK_END="<!-- ARIS-COPILOT:END -->"
@@ -204,7 +205,7 @@ resolve_aris_repo() {
 build_upstream_inventory() {
     local repo="$1" out="$2"
     local skills_dir="$repo/skills"
-    local d name
+    local d name agents_dir agent_name base_name f
     : > "$out"
 
     for d in "$skills_dir"/*/; do
@@ -223,6 +224,18 @@ build_upstream_inventory() {
     # Include shared-references as a support directory
     if [[ -d "$skills_dir/shared-references" ]]; then
         printf "support|shared-references|skills/shared-references\n" >> "$out"
+    fi
+
+    # Include agent profiles from .github/agents/
+    agents_dir="$repo/.github/agents"
+    if [[ -d "$agents_dir" ]]; then
+        for f in "$agents_dir"/*.md; do
+            [[ -f "$f" ]] || continue
+            agent_name="$(basename "$f")"
+            base_name="${agent_name%.agent.md}"
+            is_safe_name "$base_name" || { warn "skipping unsafe agent name: $agent_name"; continue; }
+            printf "agent|%s|.github/agents/%s\n" "$agent_name" "$agent_name" >> "$out"
+        done
     fi
 
     [[ -s "$out" ]] || die "upstream inventory empty"
@@ -520,6 +533,7 @@ PROJECT_PATH="${PROJECT_PATH:-$(pwd)}"
 PROJECT_PATH="$(abs_path "$PROJECT_PATH")"
 ARIS_REPO="$(resolve_aris_repo)"
 PROJECT_SKILLS_DIR="$PROJECT_PATH/$SKILLS_REL"
+PROJECT_AGENTS_DIR="$PROJECT_PATH/$AGENTS_REL"
 PROJECT_ARIS_DIR="$PROJECT_PATH/$ARIS_DIR_NAME"
 MANIFEST_PATH="$PROJECT_ARIS_DIR/$MANIFEST_NAME"
 MANIFEST_PREV="$PROJECT_ARIS_DIR/$MANIFEST_PREV_NAME"
@@ -536,7 +550,7 @@ fi
 
 check_no_symlinked_parents() {
     local p
-    for p in "$PROJECT_ARIS_DIR" "$PROJECT_PATH/.github" "$PROJECT_SKILLS_DIR"; do
+    for p in "$PROJECT_ARIS_DIR" "$PROJECT_PATH/.github" "$PROJECT_SKILLS_DIR" "$PROJECT_AGENTS_DIR"; do
         if is_symlink "$p"; then
             die "$p is a symlink; refusing to mutate symlinked parent directories"
         fi
@@ -596,7 +610,11 @@ compute_plan() {
 
     while IFS='|' read -r kind name source_rel; do
         [[ -z "$name" ]] && continue
-        target_path="$PROJECT_SKILLS_DIR/$name"
+        if [[ "$kind" == "agent" ]]; then
+            target_path="$PROJECT_AGENTS_DIR/$name"
+        else
+            target_path="$PROJECT_SKILLS_DIR/$name"
+        fi
         expected_target="$ARIS_REPO/$source_rel"
         in_manifest=false
         [[ -n "$(manifest_lookup_target "$manifest_data" "$name")" ]] && in_manifest=true
@@ -664,7 +682,11 @@ write_manifest_tmp() {
         printf "kind\tname\tsource_rel\ttarget_rel\tmode\n"
         awk -F'|' '$1=="REUSE"||$1=="ADOPT"||$1=="CREATE"||$1=="UPDATE_TARGET"{print}' "$plan" \
         | while IFS='|' read -r _ kind name source_rel _extra; do
-            printf "%s\t%s\t%s\t%s/%s\tsymlink\n" "$kind" "$name" "$source_rel" "$SKILLS_REL" "$name"
+            if [[ "$kind" == "agent" ]]; then
+                printf "%s\t%s\t%s\t%s/%s\tsymlink\n" "$kind" "$name" "$source_rel" "$AGENTS_REL" "$name"
+            else
+                printf "%s\t%s\t%s\t%s/%s\tsymlink\n" "$kind" "$name" "$source_rel" "$SKILLS_REL" "$name"
+            fi
         done
     } > "$out"
 }
@@ -673,9 +695,14 @@ apply_plan() {
     local plan="$1"
     local action kind name source_rel extra target_path expected_target current_target
     mkdir -p "$PROJECT_SKILLS_DIR"
+    mkdir -p "$PROJECT_AGENTS_DIR"
     while IFS='|' read -r action kind name source_rel extra; do
         [[ -z "$name" ]] && continue
-        target_path="$PROJECT_SKILLS_DIR/$name"
+        if [[ "$kind" == "agent" ]]; then
+            target_path="$PROJECT_AGENTS_DIR/$name"
+        else
+            target_path="$PROJECT_SKILLS_DIR/$name"
+        fi
         expected_target="$ARIS_REPO/$source_rel"
         case "$action" in
             REUSE|ADOPT)
