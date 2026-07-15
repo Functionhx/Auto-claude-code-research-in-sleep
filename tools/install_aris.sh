@@ -656,7 +656,7 @@ fi
 # (.aris and .claude/skills may not exist yet — only check if present.)
 check_no_symlinked_parents() {
     local p
-    for p in "$PROJECT_ARIS_DIR" "$PROJECT_PATH/.claude" "$PROJECT_SKILLS_DIR"; do
+    for p in "$PROJECT_ARIS_DIR" "$PROJECT_PATH/.claude" "$PROJECT_SKILLS_DIR" "$PROJECT_PATH/.github" "$PROJECT_PATH/.github/agents"; do
         if is_symlink "$p"; then
             die "S9: $p is a symlink — refusing to install (would mutate symlink target)"
         fi
