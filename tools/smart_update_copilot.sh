@@ -27,6 +27,10 @@
 #               declined skills)
 #   --skip-new: skip every new skill without recording a decline (same as the
 #               automatic behavior when there is no TTY)
+#   --force-agents: force-overwrite customized agent profiles (requires --apply).
+#               Updates baseline hashes after overwrite so future non-force runs
+#               recognize the new upstream version as the baseline. Without this
+#               flag, customized agents are skipped with a warning.
 # shared-references is support content, not a selectable skill: it is always
 # kept in sync and never subject to this confirmation.
 #
@@ -36,6 +40,7 @@
 set -euo pipefail
 
 APPLY=false
+FORCE_AGENTS=false
 MODE="global"
 PROJECT_PATH=""
 CUSTOM_UPSTREAM=""
@@ -49,6 +54,7 @@ usage() { sed -n '2,34p' "$0" | sed 's/^# \?//'; }
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --apply) APPLY=true; shift ;;
+        --force-agents) FORCE_AGENTS=true; shift ;;
         --add-new) NEW_POLICY="add"; shift ;;
         --skip-new) NEW_POLICY="skip"; shift ;;
         --project) MODE="project"; PROJECT_PATH="${2:?--project requires path}"; shift 2 ;;
@@ -344,7 +350,11 @@ if [[ -d "$UPSTREAM_AGENTS_DIR" ]]; then
 
                 if $agent_custom; then
                     AGENTS_CUSTOMIZED=$((AGENTS_CUSTOMIZED + 1))
-                    log "  ~ agent $agent_name (customized — will NOT update)"
+                    if $FORCE_AGENTS; then
+                        log "  ~ agent $agent_name (customized — will force-update)"
+                    else
+                        log "  ~ agent $agent_name (customized — will NOT update)"
+                    fi
                 else
                     AGENTS_UPDATED=$((AGENTS_UPDATED + 1))
                     log "  ~ agent $agent_name (updatable)"
@@ -359,7 +369,7 @@ if [[ -d "$UPSTREAM_AGENTS_DIR" ]]; then
     log ""
 fi
 
-if (( ${#UPDATED[@]} == 0 && ${#NEW[@]} == 0 && AGENTS_UPDATED == 0 && AGENTS_NEW == 0 )); then
+if (( ${#UPDATED[@]} == 0 && ${#NEW[@]} == 0 && AGENTS_UPDATED == 0 && AGENTS_NEW == 0 && AGENTS_CUSTOMIZED == 0 )); then
     log "Everything up to date."
     $APPLY && ensure_global_pointer
     exit 0
@@ -369,7 +379,13 @@ fi
     if ! $APPLY; then
         log "Dry run complete. Use --apply to apply these changes."
         if (( AGENTS_UPDATED + AGENTS_NEW + AGENTS_CUSTOMIZED > 0 )); then
-            log "Agent profiles: ${AGENTS_NEW} new, ${AGENTS_UPDATED} updatable, ${AGENTS_CUSTOMIZED} customized/skipped. Run with --apply to deploy."
+            if $FORCE_AGENTS && (( AGENTS_CUSTOMIZED > 0 )); then
+                log "Agent profiles: ${AGENTS_NEW} new, ${AGENTS_UPDATED} updatable, ${AGENTS_CUSTOMIZED} customized (will be force-updated with --apply). Run with --apply to deploy."
+            elif (( AGENTS_CUSTOMIZED > 0 )); then
+                log "Agent profiles: ${AGENTS_NEW} new, ${AGENTS_UPDATED} updatable, ${AGENTS_CUSTOMIZED} customized/skipped. Run with --apply to deploy, or --force-agents --apply to overwrite customized agents."
+            else
+                log "Agent profiles: ${AGENTS_NEW} new, ${AGENTS_UPDATED} updatable."
+            fi
         fi
         exit 0
     fi
@@ -455,7 +471,7 @@ if (( ${#TO_INSTALL_NEW[@]} > 0 )); then
 fi
 
 # --- Agent profile deployment (apply phase) ---
-if (( AGENTS_UPDATED + AGENTS_NEW > 0 )) && [[ -d "$UPSTREAM_AGENTS_DIR" ]]; then
+if { (( AGENTS_UPDATED + AGENTS_NEW > 0 )) || ( $FORCE_AGENTS && (( AGENTS_CUSTOMIZED > 0 )) ); } && [[ -d "$UPSTREAM_AGENTS_DIR" ]]; then
     mkdir -p "$LOCAL_AGENTS_DIR"
 
     for agent_file in "$UPSTREAM_AGENTS_DIR"/*.md; do
@@ -488,7 +504,14 @@ if (( AGENTS_UPDATED + AGENTS_NEW > 0 )) && [[ -d "$UPSTREAM_AGENTS_DIR" ]]; the
                 fi
 
                 if $agent_custom; then
-                    warn "agent $agent_name appears customized — skipping (remove $AGENT_BASELINE_FILE entry to force)"
+                    if $FORCE_AGENTS; then
+                        cp "$agent_file" "$local_agent"
+                        agent_hash="$(file_sha256 "$local_agent")"
+                        record_baseline "$AGENT_BASELINE_FILE" "$agent_name" "$agent_hash"
+                        log "  ~ agent $agent_name (force-updated, baseline updated)"
+                    else
+                        warn "agent $agent_name appears customized — skipping (use --force-agents to override)"
+                    fi
                 else
                     cp "$agent_file" "$local_agent"
                     # Record/update baseline hash
