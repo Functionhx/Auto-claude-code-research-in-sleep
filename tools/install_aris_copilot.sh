@@ -492,6 +492,7 @@ filter_upstream_by_selection() {  # $1 = upstream file, $2 = selected file, $3 =
     awk -F'|' -v sel="$2" '
         BEGIN { while ((getline line < sel) > 0) picked[line]=1 }
         $1=="support" { print; next }
+        $1=="agent"   { print; next }
         $1=="skill" && picked[$2] { print }
     ' "$1" > "$3"
 }
